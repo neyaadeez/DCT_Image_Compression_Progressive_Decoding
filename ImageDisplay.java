@@ -10,6 +10,7 @@ public class ImageDisplay {
 	JLabel lbIm1, lbIm2;
 	BufferedImage imgOne;
     private static final int BLOCK_SIZE = 8;
+    public static BufferedImage decodedImage;
 
 	// Modify the height and width values here to read and display an image with
   	// different dimensions. 
@@ -62,11 +63,9 @@ public class ImageDisplay {
 		}
 	}
 
-    public static int[][][][][] encodeImage(BufferedImage image, int width, int height, int quantizationLevel) {
+    public static void encodeImage(BufferedImage image, int width, int height, int quantizationLevel) {
         int numBlocksX = width / BLOCK_SIZE;
         int numBlocksY = height / BLOCK_SIZE;
-
-        int[][][][][] encodedImage = new int[numBlocksY][numBlocksX][3][8][8];
 
         // Iterate through each block
         for (int y = 0; y < numBlocksY; y++) {
@@ -75,17 +74,24 @@ public class ImageDisplay {
                 int[][][] block = extractBlock(image, x * BLOCK_SIZE, y * BLOCK_SIZE);
 
                 // Apply DCT
-                int[][][] dctCoefficients = performDCT(block);
+                double[][][] dctCoefficients = new double[3][8][8];
+                performDCT(block, dctCoefficients);
+                
+                int[][][] block1 = new int[3][8][8];
+                performInverseDCT(dctCoefficients, block1);
+
+                // Place block in decoded image
+                placeBlock(decodedImage, block1, x * BLOCK_SIZE, y * BLOCK_SIZE);
 
                 // Quantize DCT coefficients
                 //int[][][] quantizedCoefficients = quantizeCoefficients(dctCoefficients, quantizationLevel);
 
                 // Store quantized coefficients
-                encodedImage[y][x] = dctCoefficients; // Only store one color channel for simplicity
+                //encodedImage[y][x] = dctCoefficients; // Only store one color channel for simplicity
             }
         }
 
-        return encodedImage;
+        // return encodedImage;
     }
 
     private static int[][][] extractBlock(BufferedImage image, int startX, int startY) {
@@ -103,112 +109,155 @@ public class ImageDisplay {
         return block;
     }
 
-    private static int[][][] performDCT(int[][][] block) {
-        int[][][] dctResult = new int[block.length][8][8];
+    // private static int[][][] performDCT(int[][][] block) {
+    //     int[][][] dctResult = new int[block.length][8][8];
     
+    //     for (int c = 0; c < block.length; c++) { // For each color channel
+    //         for (int u = 0; u < 8; u++) {
+    //             for (int v = 0; v < 8; v++) {
+    //                 double sum = 0.0;
+    //                 for (int x = 0; x < 8; x++) {
+    //                     for (int y = 0; y < 8; y++) {
+    //                         sum += block[c][x][y] * Math.cos((2 * x + 1) * u * Math.PI / 16.0)
+    //                                 * Math.cos((2 * y + 1) * v * Math.PI / 16.0);
+    //                     }
+    //                 }
+    //                 double alphaU = (u == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                 double alphaV = (v == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                 double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                 double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                 sum *= (0.25 * alphaU * alphaV * cu * cv);
+    //                 dctResult[c][u][v] = (int) Math.round(sum);
+    //             }
+    //         }
+    //     }
+    
+    //     return dctResult;
+    // }
+    
+    // private static int[][][] quantizeCoefficients(int[][][] dctCoefficients, int quantizationLevel) {
+    //     int[][][] quantizedCoefficients = new int[dctCoefficients.length][8][8];
+    //     int quantizationFactor = 1 << quantizationLevel; // Equivalent to 2^quantizationLevel
+    
+    //     for (int c = 0; c < dctCoefficients.length; c++) { // For each color channel
+    //         for (int u = 0; u < 8; u++) {
+    //             for (int v = 0; v < 8; v++) {
+    //                 quantizedCoefficients[c][u][v] = Math.round(dctCoefficients[c][u][v] / (float) quantizationFactor);
+    //             }
+    //         }
+    //     }
+    
+    //     return quantizedCoefficients;
+    // }    
+
+
+    // public static BufferedImage decodeImage(int[][][] encodedImage, int width, int height, int quantizationLevel) {
+    //     int numBlocksX = width / BLOCK_SIZE;
+    //     int numBlocksY = height / BLOCK_SIZE;
+
+
+    //     // Iterate through each block
+    //     for (int y = 0; y < numBlocksY; y++) {
+    //         for (int x = 0; x < numBlocksX; x++) {
+    //             // Dequantize DCT coefficients
+    //             int[][][] dequantizedCoefficients = encodedImage[y][x];//dequantizeCoefficients(encodedImage[y][x], quantizationLevel);
+
+    //             // Apply inverse DCT
+    //             int[][][] block = performInverseDCT(dequantizedCoefficients);
+
+    //             // Place block in decoded image
+    //             placeBlock(decodedImage, block, x * BLOCK_SIZE, y * BLOCK_SIZE);
+    //         }
+    //     }
+
+    //     return decodedImage;
+    // }
+
+    // private static int[][][] dequantizeCoefficients(int[][][] quantizedCoefficients, int quantizationLevel) {
+    //     int[][][] dequantizedCoefficients = new int[quantizedCoefficients.length][8][8];
+    //     int quantizationFactor = 1 << quantizationLevel; // Equivalent to 2^quantizationLevel
+    
+    //     for (int c = 0; c < quantizedCoefficients.length; c++) { // For each color channel
+    //         for (int u = 0; u < 8; u++) {
+    //             for (int v = 0; v < 8; v++) {
+    //                 dequantizedCoefficients[c][u][v] = quantizedCoefficients[c][u][v] * quantizationFactor;
+    //             }
+    //         }
+    //     }
+    
+    //     return dequantizedCoefficients;
+    // }
+
+    // private static int[][][] performInverseDCT(int[][][] dctCoefficients) {
+    //     int[][][] imageBlocks = new int[dctCoefficients.length][8][8];
+    
+    //     for (int c = 0; c < dctCoefficients.length; c++) { // For each color channel
+    //         for (int x = 0; x < 8; x++) {
+    //             for (int y = 0; y < 8; y++) {
+    //                 double sum = 0.0;
+    //                 for (int u = 0; u < 8; u++) {
+    //                     for (int v = 0; v < 8; v++) {
+    //                         double alphaU = (u == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                         double alphaV = (v == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                         double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                         double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
+    //                         double cosTerm1 = Math.cos((2 * x + 1) * u * Math.PI / 16.0);
+    //                         double cosTerm2 = Math.cos((2 * y + 1) * v * Math.PI / 16.0);
+    //                         sum += alphaU * alphaV * cu * cv * dctCoefficients[c][u][v] * cosTerm1 * cosTerm2;
+    //                     }
+    //                 }
+    //                 sum *= 0.25;
+    //                 imageBlocks[c][x][y] = (int) Math.round(sum);
+    //             }
+    //         }
+    //     }
+    
+    //     return imageBlocks;
+    // }
+
+
+    private static void performDCT(int[][][] block, double[][][] dctCoefficients) {
+
         for (int c = 0; c < block.length; c++) { // For each color channel
             for (int u = 0; u < 8; u++) {
                 for (int v = 0; v < 8; v++) {
-                    double sum = 0.0;
+                    double t = 0.0;
                     for (int x = 0; x < 8; x++) {
                         for (int y = 0; y < 8; y++) {
-                            sum += block[c][x][y] * Math.cos((2 * x + 1) * u * Math.PI / 16.0)
+                            double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
+                            double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
+                            t += cu * cv * block[c][x][y] * Math.cos((2 * x + 1) * u * Math.PI / 16.0)
                                     * Math.cos((2 * y + 1) * v * Math.PI / 16.0);
                         }
                     }
-                    double alphaU = (u == 0) ? (1 / Math.sqrt(2)) : 1;
-                    double alphaV = (v == 0) ? (1 / Math.sqrt(2)) : 1;
-                    double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
-                    double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
-                    sum *= (0.25 * alphaU * alphaV * cu * cv);
-                    dctResult[c][u][v] = (int) Math.round(sum);
+                    t *= 0.25;
+                    dctCoefficients[c][u][v] = t;
                 }
             }
         }
-    
-        return dctResult;
     }
     
-    private static int[][][] quantizeCoefficients(int[][][] dctCoefficients, int quantizationLevel) {
-        int[][][] quantizedCoefficients = new int[dctCoefficients.length][8][8];
-        int quantizationFactor = 1 << quantizationLevel; // Equivalent to 2^quantizationLevel
-    
-        for (int c = 0; c < dctCoefficients.length; c++) { // For each color channel
-            for (int u = 0; u < 8; u++) {
-                for (int v = 0; v < 8; v++) {
-                    quantizedCoefficients[c][u][v] = Math.round(dctCoefficients[c][u][v] / (float) quantizationFactor);
-                }
-            }
-        }
-    
-        return quantizedCoefficients;
-    }    
-
-
-    public static BufferedImage decodeImage(int[][][][][] encodedImage, int width, int height, int quantizationLevel) {
-        int numBlocksX = width / BLOCK_SIZE;
-        int numBlocksY = height / BLOCK_SIZE;
-
-        BufferedImage decodedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-
-        // Iterate through each block
-        for (int y = 0; y < numBlocksY; y++) {
-            for (int x = 0; x < numBlocksX; x++) {
-                // Dequantize DCT coefficients
-                int[][][] dequantizedCoefficients = encodedImage[y][x];//dequantizeCoefficients(encodedImage[y][x], quantizationLevel);
-
-                // Apply inverse DCT
-                int[][][] block = performInverseDCT(dequantizedCoefficients);
-
-                // Place block in decoded image
-                placeBlock(decodedImage, block, x * BLOCK_SIZE, y * BLOCK_SIZE);
-            }
-        }
-
-        return decodedImage;
-    }
-
-    private static int[][][] dequantizeCoefficients(int[][][] quantizedCoefficients, int quantizationLevel) {
-        int[][][] dequantizedCoefficients = new int[quantizedCoefficients.length][8][8];
-        int quantizationFactor = 1 << quantizationLevel; // Equivalent to 2^quantizationLevel
-    
-        for (int c = 0; c < quantizedCoefficients.length; c++) { // For each color channel
-            for (int u = 0; u < 8; u++) {
-                for (int v = 0; v < 8; v++) {
-                    dequantizedCoefficients[c][u][v] = quantizedCoefficients[c][u][v] * quantizationFactor;
-                }
-            }
-        }
-    
-        return dequantizedCoefficients;
-    }
-
-    private static int[][][] performInverseDCT(int[][][] dctCoefficients) {
-        int[][][] imageBlocks = new int[dctCoefficients.length][8][8];
+    private static void performInverseDCT(double[][][] dctCoefficients, int[][][] block) {
     
         for (int c = 0; c < dctCoefficients.length; c++) { // For each color channel
             for (int x = 0; x < 8; x++) {
                 for (int y = 0; y < 8; y++) {
-                    double sum = 0.0;
+                    double t = 0.0;
                     for (int u = 0; u < 8; u++) {
                         for (int v = 0; v < 8; v++) {
-                            double alphaU = (u == 0) ? (1 / Math.sqrt(2)) : 1;
-                            double alphaV = (v == 0) ? (1 / Math.sqrt(2)) : 1;
                             double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
                             double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
-                            double cosTerm1 = Math.cos((2 * x + 1) * u * Math.PI / 16.0);
-                            double cosTerm2 = Math.cos((2 * y + 1) * v * Math.PI / 16.0);
-                            sum += alphaU * alphaV * cu * cv * dctCoefficients[c][u][v] * cosTerm1 * cosTerm2;
+                            t += cu * cv * dctCoefficients[c][u][v] * Math.cos((2 * x + 1) * u * Math.PI / 16.0)
+                                    * Math.cos((2 * y + 1) * v * Math.PI / 16.0);
                         }
                     }
-                    sum *= 0.25;
-                    imageBlocks[c][x][y] = (int) Math.round(sum);
+                    t *= 0.25;
+                    block[c][x][y] = (int) Math.round(t);
                 }
             }
         }
-    
-        return imageBlocks;
     }
+    
 
     private static void placeBlock(BufferedImage image, int[][][] block, int startX, int startY) {
         for (int y = 0; y < BLOCK_SIZE; y++) {
@@ -223,6 +272,7 @@ public class ImageDisplay {
 
 		// Read in the specified image
 		imgOne = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        decodedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 		readImageRGB(width, height, args[0], imgOne);
 
 		// Use label to display the image
@@ -232,10 +282,10 @@ public class ImageDisplay {
 		frame.getContentPane().setLayout(gLayout);
 		frame2.getContentPane().setLayout(gLayout);
 
-        int[][][][][] encod = encodeImage(imgOne, width, height, 100);
+        encodeImage(imgOne, width, height, 100);
 
 
-        BufferedImage quantizedImg= decodeImage(encod, width, height, 100);
+        BufferedImage quantizedImg= decodedImage;
 
 
 		GridBagConstraints c = new GridBagConstraints();
