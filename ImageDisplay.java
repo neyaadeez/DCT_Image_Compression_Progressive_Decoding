@@ -16,6 +16,10 @@ public class ImageDisplay {
   	// different dimensions. 
 	int width = 512;
 	int height = 512;
+    int scaledHeight = height/8;
+    int scaledWidth = width/8;
+    int[][][] originalImg;
+    int[][][] dctValues;
 
 	/** Read Image RGB
 	 *  Reads the image of given width and height at the given imgPath into the provided BufferedImage.
@@ -25,6 +29,7 @@ public class ImageDisplay {
 		try
 		{
 			int frameLength = width*height*3;
+            originalImg = new int[3][height][width];
 
 			File file = new File(imgPath);
 			RandomAccessFile raf = new RandomAccessFile(file, "r");
@@ -43,7 +48,10 @@ public class ImageDisplay {
 					// byte a = 0;
 					byte r = bytes[ind];
 					byte g = bytes[ind+height*width];
-					byte b = bytes[ind+height*width*2]; 
+					byte b = bytes[ind+height*width*2];
+                    originalImg[0][y][x]=r&0xff;
+					originalImg[1][y][x]= g&0xff;
+					originalImg[2][y][x]=b&0xff;  
 
 					int pix = 0xff000000 | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 					//int pix = ((a << 24) + (r << 16) + (g << 8) + b);
@@ -216,26 +224,52 @@ public class ImageDisplay {
     // }
 
 
-    private static void performDCT(int[][][] block, double[][][] dctCoefficients) {
-
-        for (int c = 0; c < block.length; c++) { // For each color channel
-            for (int u = 0; u < 8; u++) {
-                for (int v = 0; v < 8; v++) {
-                    double t = 0.0;
-                    for (int x = 0; x < 8; x++) {
-                        for (int y = 0; y < 8; y++) {
-                            double cv = (v == 0) ? (1 / Math.sqrt(2)) : 1;
-                            double cu = (u == 0) ? (1 / Math.sqrt(2)) : 1;
-                            t += cu * cv * block[c][x][y] * Math.cos((2 * x + 1) * u * Math.PI / 16.0)
-                                    * Math.cos((2 * y + 1) * v * Math.PI / 16.0);
+    private void performDCT(int quantLevel) {
+        double[][][][] cosValues = new double[8][8][8][8];
+        double pi = Math.PI;
+        dctValues = new int[3][height][width];
+    
+        // Initialize cosine values
+        for (int i1 = 0; i1 < 8; i1++) {
+            int i1_2 = 2 * i1 + 1;
+            for (int j1 = 0; j1 < 8; j1++) {
+                for (int i2 = 0; i2 < 8; i2++) {
+                    int i2_2 = 2 * i2 + 1;
+                    for (int j2 = 0; j2 < 8; j2++) {
+                        cosValues[j1][j2][i1][i2] = Math.cos(pi * i1_2 * j1 * 0.0625) * Math.cos(pi * i2_2 * j2 * 0.0625);
+                    }
+                }
+            }
+        }
+    
+        // Perform Discrete Cosine Transform
+        for (int ch = 0; ch < 3; ch++) {
+            for (int y = 0; y < scaledHeight; y++) {
+                for (int x = 0; x < scaledWidth; x++) {
+                    for (int v = 0; v < 8; v++) {
+                        for (int u = 0; u < 8; u++) {
+                            double sumDCT = 0;
+                            double c = 0;
+                            if (u != 0 && v != 0)
+                                c = 0.25;
+                            else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+                                c = 0.25 * 0.707;
+                            else
+                                c = 0.125;
+    
+                            for (int j = 0; j < 8; j++) {
+                                for (int i = 0; i < 8; i++) {
+                                    sumDCT += originalImg[ch][j + y * 8][i + x * 8] * cosValues[v][u][j][i];
+                                }
+                            }
+                            dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / quantLevel);
                         }
                     }
-                    t *= 0.25;
-                    dctCoefficients[c][u][v] = t;
                 }
             }
         }
     }
+    
     
     private static void performInverseDCT(double[][][] dctCoefficients, int[][][] block) {
     
