@@ -134,72 +134,48 @@ public class ImageDisplay {
         imgOne = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         decodedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         readImageRGB(width, height, args[0], imgOne);
-        finalImg = new int[3][height][width];
-    
-        // Use label to display the image
-        frame = new JFrame();
-        GridBagLayout gLayout = new GridBagLayout();
-        frame.getContentPane().setLayout(gLayout);
-    
-        int qLevel = Integer.parseInt(args[1]);
-        int mode = Integer.parseInt(args[2]);
-        int latency = Integer.parseInt(args[3]);
-        performDCT(qLevel);
-        switch (mode) {
-            case 1:
-                
-                break;
-        
-            default:
-                break;
-        }
-
-        for(int i=0; i<8; i++){
-            for(int j=0; j<8; j++){
-                System.out.print(originalImg[1][i][j]);
-            }
-            System.out.println();
-        }
-        System.out.println("---------------");
-
-        for(int i=0; i<8; i++){
-            for(int j=0; j<8; j++){
-                System.out.print(dctValues[1][i][j]);
-            }
-            System.out.println();
-        }
-    
-        // Perform inverse DCT on the entire image
-        for(int j=0;j<scaledHeight;j++)
-		{
-		   	for(int i=0;i<scaledWidth;i++)
-		   	{
-		   		performInverseDCT(j*8,i*8,decodedImage,qLevel);
-		   	}
-		}
-
-        BufferedImage quantizedImg = decodedImage;
-    
-        GridBagConstraints c = new GridBagConstraints();
-        c.fill = GridBagConstraints.HORIZONTAL;
-        c.anchor = GridBagConstraints.CENTER;
-        c.weightx = 0.5;
-        c.gridx = 0;
-        c.gridy = 0;
+        // Initialize frame
+        JFrame frame = new JFrame();
+        frame.setLayout(new GridLayout(1, 2)); // Set GridLayout with 1 row and 2 columns
 
         // Display first image
         JLabel lbIm1 = new JLabel(new ImageIcon(imgOne));
-        frame.getContentPane().add(createHeaderPanel("Original Image", lbIm1), c);
-
-        c.gridx = 1; // Move to the next column
+        frame.add(createHeaderPanel("Original Image", lbIm1));
 
         // Display second image
-        JLabel lbIm2 = new JLabel(new ImageIcon(quantizedImg));
-        frame.getContentPane().add(createHeaderPanel("Baseline Mode", lbIm2), c);
+        JLabel lbIm2 = new JLabel(new ImageIcon(decodedImage));
+        frame.add(createHeaderPanel("Baseline Mode", lbIm2));
 
         frame.pack();
         frame.setVisible(true);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        finalImg = new int[3][height][width];
+
+        int qLevel = Integer.parseInt(args[1]);
+        int mode = Integer.parseInt(args[2]);
+        int latency = Integer.parseInt(args[3]);
+        performDCT(qLevel);
+
+        switch (mode) {
+            case 1:
+                for (int j = 0; j < scaledHeight; j++) {
+                    for (int i = 0; i < scaledWidth; i++) {
+                        try {
+                            performInverseDCT(j * 8, i * 8, decodedImage, qLevel);
+                            lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
+                            lbIm2.updateUI(); // Refresh UI
+                            Thread.sleep(latency);
+                        } catch (Exception e) {
+                            System.out.println(e.getMessage());
+                        }
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
     }
 
     private static JPanel createHeaderPanel(String headerText, JLabel contentLabel) {
