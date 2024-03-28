@@ -19,7 +19,7 @@ public class ImageDisplay {
     double[][][][] cosValues;
     int[][][] finalImg;
 
-    private void readImageRGB(int width, int height, String imgPath, BufferedImage img) {
+    public void readImageRGB(int width, int height, String imgPath, BufferedImage img) {
         try {
             int frameLength = width * height * 3;
             originalImg = new int[3][height][width];
@@ -56,7 +56,7 @@ public class ImageDisplay {
         }
     }
 
-    private void performDCT(int quantLevel) {
+    public void performDCT(int quantLevel) {
         cosValues = new double[8][8][8][8];
         double pi = Math.PI;
         dctValues = new int[3][height][width];
@@ -100,7 +100,7 @@ public class ImageDisplay {
         }
     }
 
-    private void performInverseDCT(int yPos, int xPos, BufferedImage image, int quantLevel) {
+    public void iDCTMode1(int yPos, int xPos, BufferedImage image, int quantLevel) {
         for (int ch = 0; ch < 3; ch++) {
             for (int j = 0; j < 8; j++) {
                 for (int i = 0; i < 8; i++) {
@@ -129,11 +129,87 @@ public class ImageDisplay {
         }
     }
 
+    // private void iDCTMode2(int y, int x, BufferedImage img, int qLevel, int limit) {
+    //     for (int ch = 0; ch < 3; ch++) {
+    //         for (int j = 0; j < 8; j++) {
+    //             for (int i = 0; i < 8; i++) {
+    //                 double sum = 0;
+    //                 double c;
+    //                 for (int v = 0; v < 8; v++) {
+    //                     for (int u = 0; u < 8; u++) {
+    //                         if (u != 0 && v != 0)
+    //                             c = 0.25;
+    //                         else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+    //                             c = 0.25 * 0.707;
+    //                         else
+    //                             c = 0.125;
+    
+    //                         if ((u + v) <= limit) {
+    //                             sum += dctValues[ch][y + v][x + u] * cosValues[v][u][j][i] * c;
+    //                         }
+    //                     }
+    //                 }
+    //                 finalImg[ch][y + j][x + i] = (int) (sum * Math.pow(2, qLevel));
+    
+    //                 // Set the pixel in the image
+    //                 int rgb = img.getRGB(x + i, y + j);
+    //                 if (ch == 0) {
+    //                     rgb = (rgb & 0xFF00FFFF) | ((finalImg[ch][y + j][x + i] << 16) & 0x00FF0000);
+    //                 } else if (ch == 1) {
+    //                     rgb = (rgb & 0xFFFF00FF) | ((finalImg[ch][y + j][x + i] << 8) & 0x0000FF00);
+    //                 } else if (ch == 2) {
+    //                     rgb = (rgb & 0xFFFFFF00) | (finalImg[ch][y + j][x + i] & 0x000000FF);
+    //                 }
+    //                 img.setRGB(x + i, y + j, rgb);
+    //             }
+    //         }
+    //     }
+    // }
+    private void iDCTMode2(int y, int x, BufferedImage im, int quantazLevel, int limit) {
+        for (int chan = 0; chan < 3; chan++) {
+            int sh = 0;
+            if (chan == 0) {
+                sh = 0xff00ffff;
+            } else if (chan == 1) {
+                sh = 0xffff00ff;
+            } else {
+                sh = 0xffffff00;
+            }
+            for (int j = 0; j < 8; j++) {
+                for (int i = 0; i < 8; i++) {
+                    double sum = 0;
+                    double c = 1;
+                    int u = 0;
+                    int v = 0;
+                    for (v = 0; v < 8; v++) {
+                        for (u = 0; u < 8; u++) {
+                            if (u == 0) {
+                                c = 0.7071156;
+                            }
+                            if (u == limit - 1 || v == limit - 1) {
+                                c = 0.7071156;
+                            }
+                            if (u < limit && v < limit) {
+                                sum += dctValues[chan][v][u] * cosValues[j][i][v][u] * c;
+                            } else {
+                                sum += 0;
+                            }
+                        }
+                    }
+                    finalImg[chan][j][i] = (int) Math.max(0, Math.min(255, sum / Math.min(2, quantazLevel)));
+                    int rgb = im.getRGB(x + i, y + j) & sh;
+                    im.setRGB(x+ i, y + j, rgb | (finalImg[chan][j][i] << (8 * (2 - chan)) & sh << 8 * (2 - chan)));
+                }
+            }
+        }
+    }
+
     public void showIms(String[] args){
         // Read in the specified image
         imgOne = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         decodedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         readImageRGB(width, height, args[0], imgOne);
+        
         // Initialize frame
         JFrame frame = new JFrame();
         frame.setLayout(new GridLayout(1, 2)); // Set GridLayout with 1 row and 2 columns
@@ -144,7 +220,7 @@ public class ImageDisplay {
 
         // Display second image
         JLabel lbIm2 = new JLabel(new ImageIcon(decodedImage));
-        frame.add(createHeaderPanel("Baseline Mode", lbIm2));
+        frame.add(createHeaderPanel("Decoded Image", lbIm2));
 
         frame.pack();
         frame.setVisible(true);
@@ -159,26 +235,56 @@ public class ImageDisplay {
 
         switch (mode) {
             case 1:
-                for (int j = 0; j < scaledHeight; j++) {
-                    for (int i = 0; i < scaledWidth; i++) {
+                if(latency != 0){
+                    for (int j = 0; j < scaledHeight; j++) {
+                        for (int i = 0; i < scaledWidth; i++) {
+                            try {
+                                iDCTMode1(j * 8, i * 8, decodedImage, qLevel);
+                                lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
+                                lbIm2.updateUI(); // Refresh UI
+                                Thread.sleep(latency);
+                            } catch (Exception e) {
+                                System.out.println(e.getMessage());
+                            }
+                        }
+                    }
+                }else{
+                    for (int j = 0; j < scaledHeight; j++) {
+                        for (int i = 0; i < scaledWidth; i++) {
+                                iDCTMode1(j * 8, i * 8, decodedImage, qLevel);
+                        }
+                    }
+                    lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
+                }
+                break;
+            case 2:
+                {
+                    int limit = 0;
+                    while (limit < 64) {
+                        for (int j = 0; j < scaledHeight; j++) {
+                            for (int i = 0; i < scaledWidth; i++) {
+                                iDCTMode2(j * 8, i * 8, decodedImage, qLevel, limit);
+                            }
+                        }
+                        limit++;
+                        lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
+                        lbIm2.updateUI();
                         try {
-                            performInverseDCT(j * 8, i * 8, decodedImage, qLevel);
-                            lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
-                            lbIm2.updateUI(); // Refresh UI
                             Thread.sleep(latency);
-                        } catch (Exception e) {
-                            System.out.println(e.getMessage());
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
                     }
                 }
                 break;
+
 
             default:
                 break;
         }
     }
 
-    private static JPanel createHeaderPanel(String headerText, JLabel contentLabel) {
+    public static JPanel createHeaderPanel(String headerText, JLabel contentLabel) {
         JPanel panel = new JPanel(new BorderLayout());
         JLabel headerLabel = new JLabel(headerText);
         headerLabel.setHorizontalAlignment(SwingConstants.CENTER);
