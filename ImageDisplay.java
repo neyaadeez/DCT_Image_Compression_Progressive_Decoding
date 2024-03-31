@@ -57,7 +57,7 @@ public class ImageDisplay {
         }
     }
 
-    public void performDCT(int quantLevel) {
+    public void encodeDCT(int quantLevel) {
         cosValues = new double[8][8][8][8];
         double pi = Math.PI;
         dctValues = new int[3][height][width];
@@ -101,94 +101,107 @@ public class ImageDisplay {
         }
     }
 
-    public void iDCTMode1(int yPos, int xPos, BufferedImage image, int quantLevel) {
-        for (int ch = 0; ch < 3; ch++) {
-            for (int j = 0; j < 8; j++) {
-                for (int i = 0; i < 8; i++) {
-                    double sum = 0;
-                    for (int v = 0; v < 8; v++) {
-                        for (int u = 0; u < 8; u++) {
-                            double c;
-                            if (u != 0 && v != 0)
-                                c = 0.25;
-                            else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                c = 0.25 * 0.707;
-                            else
-                                c = 0.125;
-                            sum += dctValues[ch][v + yPos][u + xPos] * cosValues[v][u][j][i] * c;
+    public void iDCTBaselineMode(int quantLevel, int latency, BufferedImage image) {
+        for(int z1=0;z1<scaledHeight;z1++){
+            for(int z2=0;z2<scaledWidth;z2++){
+                for (int ch = 0; ch < 3; ch++) {
+                    for (int j = 0; j < 8; j++) {
+                        for (int i = 0; i < 8; i++) {
+                            double sum = 0;
+                            for (int v = 0; v < 8; v++) {
+                                for (int u = 0; u < 8; u++) {
+                                    double c;
+                                    if (u != 0 && v != 0)
+                                        c = 0.25;
+                                    else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+                                        c = 0.25 * 0.707;
+                                    else
+                                        c = 0.125;
+                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
+                                }
+                            }
+                            finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * Math.pow(2, quantLevel));
+                
+                                // Set the pixel in the image
+                                int rgb = image.getRGB(z2*8 + i, z1*8 + j);
+                                if (ch == 0) {
+                                    rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 16) & 0x00FF0000);
+                                } else if (ch == 1) {
+                                    rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 8) & 0x0000FF00);
+                                } else if (ch == 2) {
+                                    rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][z1*8 + j][z2*8 + i] & 0x000000FF);
+                                }
+                                image.setRGB(z2*8 + i, z1*8 + j, rgb);
                         }
                     }
-                    finalimage[ch][j + yPos][i + xPos] = (int) (sum * Math.pow(2, quantLevel));
-
-                    int rgb = image.getRGB(xPos + i, yPos + j);
-                    int alpha = (rgb >> 24) & 0xFF;
-                    rgb = (alpha << 24) | ((finalimage[0][j + yPos][i + xPos] << 16) | (finalimage[1][j + yPos][i + xPos] << 8) | finalimage[2][j + yPos][i + xPos]);
-                    image.setRGB(xPos + i, yPos + j, rgb);
+                }
+                lbIm2.setIcon(new ImageIcon(image)); // Update image
+                lbIm2.updateUI(); // Refresh UI
+                try {
+                    Thread.sleep(latency);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
         }
     }
 
-    // private void iDCTMode2(int y, int x, BufferedImage image, int qLevel, int limit) {
-    //     for (int ch = 0; ch < 3; ch++) {
-    //         for (int j = 0; j < 8; j++) {
-    //             for (int i = 0; i < 8; i++) {
-    //                 double sum = 0;
-    //                 double c;
-    //                 for (int v = 0; v < 8; v++) {
-    //                     for (int u = 0; u < 8; u++) {
-    //                         if (u != 0 && v != 0)
-    //                             c = 0.25;
-    //                         else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-    //                             c = 0.25 * 0.707;
-    //                         else
-    //                             c = 0.125;
     
-    //                         if ((u + v) <= limit) {
-    //                             sum += dctValues[ch][y + v][x + u] * cosValues[v][u][j][i] * c;
-    //                         }
-    //                     }
-    //                 }
-    //                 finalimage[ch][y + j][x + i] = (int) (sum * Math.pow(2, qLevel));
-    
-    //                 // Set the pixel in the image
-    //                 int rgb = image.getRGB(x + i, y + j);
-    //                 if (ch == 0) {
-    //                     rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][y + j][x + i] << 16) & 0x00FF0000);
-    //                 } else if (ch == 1) {
-    //                     rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][y + j][x + i] << 8) & 0x0000FF00);
-    //                 } else if (ch == 2) {
-    //                     rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][y + j][x + i] & 0x000000FF);
-    //                 }
-    //                 image.setRGB(x + i, y + j, rgb);
-    //             }
-    //         }
-    //     }
-    // }
-    
-
     public void iDCTProgressiveSpectral(int quantLevel, int latency, BufferedImage image) {
         for (int k = 0; k < 64; k++) {
-            for(int z1=0;z1<scaledHeight;z1++)
-            {
-                for(int z2=0;z2<scaledWidth;z2++)
-                {
-            for (int ch = 0; ch < 3; ch++) {
+            for(int z1=0;z1<scaledHeight;z1++){
+                for(int z2=0;z2<scaledWidth;z2++){
+                    for (int ch = 0; ch < 3; ch++) {
                         for (int j = 0; j < 8; j++) {
                             for (int i = 0; i < 8; i++) {
                                 double sum = 0;
                                 double c;
-                                for (int v = 0; v < 8; v++) {
-                                    for (int u = 0; u < 8; u++) {
-                                        if (u != 0 && v != 0)
-                                            c = 0.25;
-                                        else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                            c = 0.25 * 0.707;
-                                        else
-                                            c = 0.125;
-                
-                                        if ((u + v) <= k) {
-                                            sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
+                                int check = 0;
+                                int v = 0, u = 0;
+                                boolean goingUp = true;
+
+                                while (v < 8 && u < 8) {
+                                    if (u != 0 && v != 0)
+                                        c = 0.25;
+                                    else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+                                        c = 0.25 * 0.707;
+                                    else
+                                        c = 0.125;
+                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
+                                    if(++check >= k)
+                                        break;
+                                    // If going up
+                                    if (goingUp) {
+                                        // If we are at the first row, move right
+                                        if (v == 0) {
+                                            u++;
+                                            goingUp = false;
+                                        }
+                                        // If we are at the last column, move down
+                                        else if (u == 8 - 1) {
+                                            v++;
+                                            goingUp = false;
+                                        }
+                                        // Move diagonally up-left
+                                        else {
+                                            v--;
+                                            u++;
+                                        }
+                                    } else {
+                                        // If we are at the last row, move down
+                                        if (v == 8 - 1) {
+                                            u++;
+                                            goingUp = true;
+                                        }
+                                        // If we are at the first column, move right
+                                        else if (u == 0) {
+                                            v++;
+                                            goingUp = true;
+                                        }
+                                        // Move diagonally down-right
+                                        else {
+                                            v++;
+                                            u--;
                                         }
                                     }
                                 }
@@ -343,31 +356,11 @@ public class ImageDisplay {
         int qLevel = Integer.parseInt(args[1]);
         int mode = Integer.parseInt(args[2]);
         int latency = Integer.parseInt(args[3]);
-        performDCT(qLevel);
+        encodeDCT(qLevel);
 
         switch (mode) {
             case 1:
-                if(latency != 0){
-                    for (int j = 0; j < scaledHeight; j++) {
-                        for (int i = 0; i < scaledWidth; i++) {
-                            try {
-                                iDCTMode1(j * 8, i * 8, decodedImage, qLevel);
-                                lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
-                                lbIm2.updateUI(); // Refresh UI
-                                Thread.sleep(latency);
-                            } catch (Exception e) {
-                                System.out.println(e.getMessage());
-                            }
-                        }
-                    }
-                }else{
-                    for (int j = 0; j < scaledHeight; j++) {
-                        for (int i = 0; i < scaledWidth; i++) {
-                                iDCTMode1(j * 8, i * 8, decodedImage, qLevel);
-                        }
-                    }
-                    lbIm2.setIcon(new ImageIcon(decodedImage)); // Update image
-                }
+                iDCTBaselineMode(qLevel, latency, decodedImage);
                 break;
             case 2:
                 iDCTProgressiveSpectral(qLevel, latency, decodedImage);
