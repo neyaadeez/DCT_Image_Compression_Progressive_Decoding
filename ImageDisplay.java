@@ -9,7 +9,7 @@ public class ImageDisplay {
     JLabel lbIm1;
     JLabel lbIm2;
     BufferedImage imageOne;
-    public static BufferedImage decodedImage;
+    BufferedImage decodedImage;
 
     int width = 512;
     int height = 512;
@@ -17,8 +17,11 @@ public class ImageDisplay {
     int scaledWidth = width / 8;
     int[][][] originalimage;
     int[][][] dctValues;
-    double[][][][] cosValues;
+    double[][][][] cos;
     int[][][] finalimage;
+    double c1 = 0.25;
+    double c2 = 0.25 * 0.707;
+    double c3 = 0.125;
 
     public void readImageRGB(int width, int height, String imagePath, BufferedImage image) {
         try {
@@ -59,39 +62,38 @@ public class ImageDisplay {
 
     public void encodeDCT(int quantLevel) {
         double calpow = Math.pow(2, quantLevel);
-        cosValues = new double[8][8][8][8];
+        cos = new double[8][8][8][8];
         double pi = Math.PI;
         dctValues = new int[3][height][width];
 
-        for (int i1 = 0; i1 < 8; i1++) {
-            int i1_2 = 2 * i1 + 1;
-            for (int j1 = 0; j1 < 8; j1++) {
-                for (int i2 = 0; i2 < 8; i2++) {
-                    int i2_2 = 2 * i2 + 1;
-                    for (int j2 = 0; j2 < 8; j2++) {
-                        cosValues[j1][j2][i1][i2] = Math.cos(pi * i1_2 * j1 * 0.0625) * Math.cos(pi * i2_2 * j2 * 0.0625);
+        for (int x = 0; x < 8; x++) {
+            int x2 = 2 * x + 1;
+            for (int y = 0; y < 8; y++) {
+                for (int a = 0; a < 8; a++) {
+                    int a2 = 2 * a + 1;
+                    for (int b = 0; b < 8; b++) {
+                        cos[y][b][x][a] = Math.cos(pi * x2 * y * 0.0625) * Math.cos(pi * a2 * b * 0.0625);
                     }
                 }
             }
-        }
+        }        
 
         for (int ch = 0; ch < 3; ch++) {
             for (int y = 0; y < scaledHeight; y++) {
                 for (int x = 0; x < scaledWidth; x++) {
+                    double c;
                     for (int v = 0; v < 8; v++) {
                         for (int u = 0; u < 8; u++) {
                             double sumDCT = 0;
-                            double c = 0;
                             if (u != 0 && v != 0)
-                                c = 0.25;
+                                c = c1;
                             else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                c = 0.25 * 0.707;
+                                c = c2;
                             else
-                                c = 0.125;
-
+                                c = c3;
                             for (int j = 0; j < 8; j++) {
                                 for (int i = 0; i < 8; i++) {
-                                    sumDCT += originalimage[ch][j + y * 8][i + x * 8] * cosValues[v][u][j][i];
+                                    sumDCT += originalimage[ch][j + y * 8][i + x * 8] * cos[v][u][j][i];
                                 }
                             }
                             dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / calpow);
@@ -104,6 +106,10 @@ public class ImageDisplay {
 
     public void iDCTBaselineMode(int quantLevel, int latency, BufferedImage image) {
         double calpow = Math.pow(2, quantLevel);
+        int flag = 1;
+        if(latency == 0){
+            flag = 0;
+        }
         for(int z1=0;z1<scaledHeight;z1++){
             for(int z2=0;z2<scaledWidth;z2++){
                 for (int ch = 0; ch < 3; ch++) {
@@ -114,12 +120,12 @@ public class ImageDisplay {
                                 for (int u = 0; u < 8; u++) {
                                     double c;
                                     if (u != 0 && v != 0)
-                                        c = 0.25;
+                                        c = c1;
                                     else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                        c = 0.25 * 0.707;
+                                        c = c2;
                                     else
-                                        c = 0.125;
-                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
+                                        c = c3;
+                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cos[v][u][j][i] * c;
                                 }
                             }
                             finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * calpow);
@@ -137,14 +143,20 @@ public class ImageDisplay {
                         }
                     }
                 }
-                lbIm2.setIcon(new ImageIcon(image)); // Update image
-                lbIm2.updateUI(); // Refresh UI
-                try {
-                    Thread.sleep(latency);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                if(flag == 1){
+                    lbIm2.setIcon(new ImageIcon(image)); // Update image
+                    lbIm2.updateUI(); // Refresh UI
+                    try {
+                        Thread.sleep(latency);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
+        }
+        if(flag == 0){
+            lbIm2.setIcon(new ImageIcon(image)); // Update image
+            lbIm2.updateUI();
         }
     }
 
@@ -165,12 +177,12 @@ public class ImageDisplay {
 
                                 while (v < 8 && u < 8) {
                                     if (u != 0 && v != 0)
-                                        c = 0.25;
+                                        c = c1;
                                     else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                        c = 0.25 * 0.707;
+                                        c = c2;
                                     else
-                                        c = 0.125;
-                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
+                                        c = c3;
+                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cos[v][u][j][i] * c;
                                     if(++check >= k)
                                         break;
                                     // If going up
@@ -239,7 +251,7 @@ public class ImageDisplay {
     public void progressiveMode(int quantLevel, int latency, BufferedImage image) {
         int maxBitDepth = 31;
         double calpow = Math.pow(2, quantLevel);
-        for (int bit = 1; bit <= maxBitDepth; bit++) { // Iterate over each significant bit
+        for (int bit = 1; bit <= maxBitDepth; bit++) {
             int shiftAmount = maxBitDepth - bit;
             for (int z1 = 0; z1 < scaledHeight; z1++) {
                 for (int z2 = 0; z2 < scaledWidth; z2++) {
@@ -251,18 +263,18 @@ public class ImageDisplay {
                                     for (int u = 0; u < 8; u++) {
                                         double c;
                                         if (u != 0 && v != 0)
-                                            c = 0.25;
+                                            c = c1;
                                         else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                            c = 0.25 * 0.707;
+                                            c = c2;
                                         else
-                                            c = 0.125;
+                                            c = c3;
                                         
                                         double coefficient = dctValues[ch][z1 * 8 + v][z2 * 8 + u];
                                         long coefficientAsLong = (long) coefficient;
                                         coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
                                         coefficient = coefficientAsLong;
                                         
-                                        sum += coefficient * cosValues[v][u][j][i] * c;
+                                        sum += coefficient * cos[v][u][j][i] * c;
                                     }
                                 }
                                 finalimage[ch][z1 * 8 + j][z2 * 8 + i] = (int) (sum * calpow);
