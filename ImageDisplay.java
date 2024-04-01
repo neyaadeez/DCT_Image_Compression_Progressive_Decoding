@@ -93,9 +93,11 @@ public class ImageDisplay {
                                 c = c3;
                             for (int j = 0; j < 8; j++) {
                                 for (int i = 0; i < 8; i++) {
+                                    // DCT
                                     sumDCT += originalimage[ch][j + y * 8][i + x * 8] * cos[v][u][j][i];
                                 }
                             }
+                            // quantization
                             dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / calpow);
                         }
                     }
@@ -125,10 +127,13 @@ public class ImageDisplay {
                                         c = c2;
                                     else
                                         c = c3;
-                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cos[v][u][j][i] * c;
+                                    // Dequantization
+                                    double dequantizedValue = dctValues[ch][z1*8 + v][z2*8 + u] * calpow;
+                                    // iDCT
+                                    sum += dequantizedValue * cos[v][u][j][i] * c;
                                 }
                             }
-                            finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * calpow);
+                            finalimage[ch][z1*8 + j][z2*8 + i] = (int) sum;
                 
                             // Set the pixel in the image
                             int rgb = image.getRGB(z2*8 + i, z1*8 + j);
@@ -158,7 +163,7 @@ public class ImageDisplay {
             lbIm2.setIcon(new ImageIcon(image)); // Update image
             lbIm2.updateUI();
         }
-    }
+    }    
 
     
     public void iDCTProgressiveSpectral(int quantLevel, int latency, BufferedImage image) {
@@ -182,7 +187,10 @@ public class ImageDisplay {
                                         c = c2;
                                     else
                                         c = c3;
-                                    sum += dctValues[ch][z1*8 + v][z2*8 + u] * cos[v][u][j][i] * c;
+                                    // Dequantization
+                                    double dequantizedValue = dctValues[ch][z1*8 + v][z2*8 + u] * calpow;
+                                    // iDCT
+                                    sum += dequantizedValue * cos[v][u][j][i] * c;
                                     if(++check >= k)
                                         break;
                                     // If going up
@@ -220,7 +228,7 @@ public class ImageDisplay {
                                         }
                                     }
                                 }
-                                finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * calpow);
+                                finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum);
                 
                                 // Set the pixel in the image
                                 int rgb = image.getRGB(z2*8 + i, z1*8 + j);
@@ -248,9 +256,10 @@ public class ImageDisplay {
     }
     
 
-    public void progressiveMode(int quantLevel, int latency, BufferedImage image) {
-        int maxBitDepth = 31;
-        double calpow = Math.pow(2, quantLevel);
+    public void iDCTProgressiveSuccessiveBit(int quantLevel, int latency, BufferedImage image) {
+        int maxBitDepth = getMaxBit();
+        System.out.println("maxBits: "+maxBitDepth);
+        int calpow = (int)Math.pow(2, quantLevel);
         for (int bit = 1; bit <= maxBitDepth; bit++) {
             int shiftAmount = maxBitDepth - bit;
             for (int z1 = 0; z1 < scaledHeight; z1++) {
@@ -269,15 +278,26 @@ public class ImageDisplay {
                                         else
                                             c = c3;
                                         
-                                        double coefficient = dctValues[ch][z1 * 8 + v][z2 * 8 + u];
-                                        long coefficientAsLong = (long) coefficient;
-                                        coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
-                                        coefficient = coefficientAsLong;
-                                        
+                                        int coefficient = dctValues[ch][z1 * 8 + v][z2 * 8 + u];
+                                        // long coefficientAsLong = (long) coefficient;
+                                        // coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
+                                        // coefficient = coefficientAsLong;
+                                        if(coefficient < 0){
+                                            int val = -coefficient;
+                                            val = (val >> shiftAmount) << shiftAmount;
+                                            coefficient = -val;
+                                        }else{
+                                            int val = coefficient;
+                                            val = (val >> shiftAmount) << shiftAmount;
+                                            coefficient = val;
+                                        }
+                                        // Dequantization
+                                        coefficient *= calpow;
+                                        // iDCT
                                         sum += coefficient * cos[v][u][j][i] * c;
                                     }
                                 }
-                                finalimage[ch][z1 * 8 + j][z2 * 8 + i] = (int) (sum * calpow);
+                                finalimage[ch][z1 * 8 + j][z2 * 8 + i] = (int) (sum);
     
                                 // Set the pixel in the image
                                 int rgb = image.getRGB(z2 * 8 + i, z1 * 8 + j);
@@ -294,8 +314,8 @@ public class ImageDisplay {
                     }
                 }
             }
-            lbIm2.setIcon(new ImageIcon(image)); // Update image
-            lbIm2.updateUI(); // Refresh UI
+            lbIm2.setIcon(new ImageIcon(image));
+            lbIm2.updateUI();
             try {
                 Thread.sleep(latency);
             } catch (InterruptedException e) {
@@ -303,7 +323,31 @@ public class ImageDisplay {
             }
         }
     }
-    
+
+    public int getMaxBit() {
+        int maxBitDepth = 0;
+        for (int ch = 0; ch < 3; ch++) {
+            for (int z1 = 0; z1 < scaledHeight; z1++) {
+                for (int z2 = 0; z2 < scaledWidth; z2++) {
+                    for (int v = 0; v < 8; v++) {
+                        for (int u = 0; u < 8; u++) {
+                            int coefficient = Math.abs(dctValues[ch][z1 * 8 + v][z2 * 8 + u]);
+                            int bitDepth = 0;
+                            while (coefficient != 0) {
+                                coefficient >>= 1;
+                                bitDepth++;
+                            }
+                            if (bitDepth > maxBitDepth) {
+                                maxBitDepth = bitDepth;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return maxBitDepth;
+    }
+
     public void showIms(String[] args){
         // Read in the specified image
         imageOne = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -341,7 +385,7 @@ public class ImageDisplay {
                 iDCTProgressiveSpectral(qLevel, latency, decodedImage);
                 break;
             case 3:
-                progressiveMode(qLevel, latency, decodedImage);
+                iDCTProgressiveSuccessiveBit(qLevel, latency, decodedImage);
                 break;
 
 
