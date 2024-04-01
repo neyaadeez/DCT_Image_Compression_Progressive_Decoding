@@ -17,11 +17,13 @@ public class ImageDisplay {
     int scaledWidth = width / 8;
     int[][][] originalimage;
     int[][][] dctValues;
+    int[][][] deQuantizeValues;
     double[][][][] cos;
     int[][][] finalimage;
     double c1 = 0.25;
     double c2 = 0.25 * 0.707;
     double c3 = 0.125;
+    int calpow;
 
     public void readImageRGB(int width, int height, String imagePath, BufferedImage image) {
         try {
@@ -60,8 +62,7 @@ public class ImageDisplay {
         }
     }
 
-    public void encodeDCT(int quantLevel) {
-        double calpow = Math.pow(2, quantLevel);
+    public void encodeDCT() {
         cos = new double[8][8][8][8];
         double pi = Math.PI;
         dctValues = new int[3][height][width];
@@ -98,7 +99,7 @@ public class ImageDisplay {
                                 }
                             }
                             // quantization
-                            dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / calpow);
+                            dctValues[ch][v + y * 8][u + x * 8] = (int)(sumDCT * c / calpow);
                         }
                     }
                 }
@@ -106,8 +107,8 @@ public class ImageDisplay {
         }
     }
 
-    public void iDCTBaselineMode(int quantLevel, int latency, BufferedImage image) {
-        double calpow = Math.pow(2, quantLevel);
+    public void iDCTBaselineMode(int latency, BufferedImage image) {
+        deQuantize();
         int flag = 1;
         if(latency == 0){
             flag = 0;
@@ -127,8 +128,7 @@ public class ImageDisplay {
                                         c = c2;
                                     else
                                         c = c3;
-                                    // Dequantization
-                                    double dequantizedValue = dctValues[ch][z1*8 + v][z2*8 + u] * calpow;
+                                    int dequantizedValue = deQuantizeValues[ch][z1*8 + v][z2*8 + u];
                                     // iDCT
                                     sum += dequantizedValue * cos[v][u][j][i] * c;
                                 }
@@ -166,8 +166,8 @@ public class ImageDisplay {
     }    
 
     
-    public void iDCTProgressiveSpectral(int quantLevel, int latency, BufferedImage image) {
-        double calpow = Math.pow(2, quantLevel);
+    public void iDCTProgressiveSpectral(int latency, BufferedImage image) {
+        deQuantize();
         for (int k = 0; k < 64; k++) {
             for(int z1=0;z1<scaledHeight;z1++){
                 for(int z2=0;z2<scaledWidth;z2++){
@@ -187,8 +187,7 @@ public class ImageDisplay {
                                         c = c2;
                                     else
                                         c = c3;
-                                    // Dequantization
-                                    double dequantizedValue = dctValues[ch][z1*8 + v][z2*8 + u] * calpow;
+                                    int dequantizedValue = deQuantizeValues[ch][z1*8 + v][z2*8 + u];
                                     // iDCT
                                     sum += dequantizedValue * cos[v][u][j][i] * c;
                                     if(++check >= k)
@@ -256,10 +255,9 @@ public class ImageDisplay {
     }
     
 
-    public void iDCTProgressiveSuccessiveBit(int quantLevel, int latency, BufferedImage image) {
+    public void iDCTProgressiveSuccessiveBit(int latency, BufferedImage image) {
+        deQuantize();
         int maxBitDepth = getMaxBit();
-        System.out.println("maxBits: "+maxBitDepth);
-        int calpow = (int)Math.pow(2, quantLevel);
         for (int bit = 1; bit <= maxBitDepth; bit++) {
             int shiftAmount = maxBitDepth - bit;
             for (int z1 = 0; z1 < scaledHeight; z1++) {
@@ -278,7 +276,7 @@ public class ImageDisplay {
                                         else
                                             c = c3;
                                         
-                                        int coefficient = dctValues[ch][z1 * 8 + v][z2 * 8 + u];
+                                        int coefficient = deQuantizeValues[ch][z1 * 8 + v][z2 * 8 + u];
                                         // long coefficientAsLong = (long) coefficient;
                                         // coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
                                         // coefficient = coefficientAsLong;
@@ -291,9 +289,6 @@ public class ImageDisplay {
                                             val = (val >> shiftAmount) << shiftAmount;
                                             coefficient = val;
                                         }
-                                        // Dequantization
-                                        coefficient *= calpow;
-                                        // iDCT
                                         sum += coefficient * cos[v][u][j][i] * c;
                                     }
                                 }
@@ -331,7 +326,7 @@ public class ImageDisplay {
                 for (int z2 = 0; z2 < scaledWidth; z2++) {
                     for (int v = 0; v < 8; v++) {
                         for (int u = 0; u < 8; u++) {
-                            int coefficient = Math.abs(dctValues[ch][z1 * 8 + v][z2 * 8 + u]);
+                            int coefficient = Math.abs(deQuantizeValues[ch][z1 * 8 + v][z2 * 8 + u]);
                             int bitDepth = 0;
                             while (coefficient != 0) {
                                 coefficient >>= 1;
@@ -346,6 +341,84 @@ public class ImageDisplay {
             }
         }
         return maxBitDepth;
+    }
+
+    public void deQuantize() {
+        deQuantizeValues = new int[3][height][width];
+        for (int ch = 0; ch < 3; ch++) {
+            for (int z1 = 0; z1 < scaledHeight; z1++) {
+                for (int z2 = 0; z2 < scaledWidth; z2++) {
+                    for (int v = 0; v < 8; v++) {
+                        for (int u = 0; u < 8; u++) {
+                            deQuantizeValues[ch][z1 * 8 + v][z2 * 8 + u] = dctValues[ch][z1 * 8 + v][z2 * 8 + u] * calpow;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    public void iDCTProgressiveSuccessive32Bit(int latency, BufferedImage image) {
+        deQuantize();
+        int maxBitDepth = 32;
+        for (int bit = 1; bit <= maxBitDepth; bit++) {
+            int shiftAmount = maxBitDepth - bit;
+            for (int z1 = 0; z1 < scaledHeight; z1++) {
+                for (int z2 = 0; z2 < scaledWidth; z2++) {
+                    for (int ch = 0; ch < 3; ch++) {
+                        for (int j = 0; j < 8; j++) {
+                            for (int i = 0; i < 8; i++) {
+                                double sum = 0;
+                                for (int v = 0; v < 8; v++) {
+                                    for (int u = 0; u < 8; u++) {
+                                        double c;
+                                        if (u != 0 && v != 0)
+                                            c = c1;
+                                        else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+                                            c = c2;
+                                        else
+                                            c = c3;
+                                        
+                                        int coefficient = deQuantizeValues[ch][z1 * 8 + v][z2 * 8 + u];
+                                        // long coefficientAsLong = (long) coefficient;
+                                        // coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
+                                        // coefficient = coefficientAsLong;
+                                        if(coefficient < 0){
+                                            int val = -coefficient;
+                                            val = (val >> shiftAmount) << shiftAmount;
+                                            coefficient = -val;
+                                        }else{
+                                            int val = coefficient;
+                                            val = (val >> shiftAmount) << shiftAmount;
+                                            coefficient = val;
+                                        }
+                                        sum += coefficient * cos[v][u][j][i] * c;
+                                    }
+                                }
+                                finalimage[ch][z1 * 8 + j][z2 * 8 + i] = (int) (sum);
+    
+                                // Set the pixel in the image
+                                int rgb = image.getRGB(z2 * 8 + i, z1 * 8 + j);
+                                if (ch == 0) {
+                                    rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][z1 * 8 + j][z2 * 8 + i] << 16) & 0x00FF0000);
+                                } else if (ch == 1) {
+                                    rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][z1 * 8 + j][z2 * 8 + i] << 8) & 0x0000FF00);
+                                } else if (ch == 2) {
+                                    rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][z1 * 8 + j][z2 * 8 + i] & 0x000000FF);
+                                }
+                                image.setRGB(z2 * 8 + i, z1 * 8 + j, rgb);
+                            }
+                        }
+                    }
+                }
+            }
+            lbIm2.setIcon(new ImageIcon(image));
+            lbIm2.updateUI();
+            try {
+                Thread.sleep(latency);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void showIms(String[] args){
@@ -375,21 +448,26 @@ public class ImageDisplay {
         int qLevel = Integer.parseInt(args[1]);
         int mode = Integer.parseInt(args[2]);
         int latency = Integer.parseInt(args[3]);
-        encodeDCT(qLevel);
+        calpow = (int)Math.pow(2, qLevel);
+        encodeDCT();
 
         switch (mode) {
             case 1:
-                iDCTBaselineMode(qLevel, latency, decodedImage);
+                iDCTBaselineMode(latency, decodedImage);
                 break;
             case 2:
-                iDCTProgressiveSpectral(qLevel, latency, decodedImage);
+                iDCTProgressiveSpectral(latency, decodedImage);
                 break;
             case 3:
-                iDCTProgressiveSuccessiveBit(qLevel, latency, decodedImage);
+                iDCTProgressiveSuccessiveBit(latency, decodedImage);
+                break;
+            case 4:
+                iDCTProgressiveSuccessive32Bit(latency, decodedImage);
                 break;
 
 
             default:
+                System.out.println("invalid");
                 break;
         }
     }
