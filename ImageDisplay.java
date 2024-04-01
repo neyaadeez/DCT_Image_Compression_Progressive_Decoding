@@ -58,6 +58,7 @@ public class ImageDisplay {
     }
 
     public void encodeDCT(int quantLevel) {
+        double calpow = Math.pow(2, quantLevel);
         cosValues = new double[8][8][8][8];
         double pi = Math.PI;
         dctValues = new int[3][height][width];
@@ -93,7 +94,7 @@ public class ImageDisplay {
                                     sumDCT += originalimage[ch][j + y * 8][i + x * 8] * cosValues[v][u][j][i];
                                 }
                             }
-                            dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / Math.pow(2, quantLevel));
+                            dctValues[ch][v + y * 8][u + x * 8] = (int) (sumDCT * c / calpow);
                         }
                     }
                 }
@@ -102,6 +103,7 @@ public class ImageDisplay {
     }
 
     public void iDCTBaselineMode(int quantLevel, int latency, BufferedImage image) {
+        double calpow = Math.pow(2, quantLevel);
         for(int z1=0;z1<scaledHeight;z1++){
             for(int z2=0;z2<scaledWidth;z2++){
                 for (int ch = 0; ch < 3; ch++) {
@@ -120,18 +122,18 @@ public class ImageDisplay {
                                     sum += dctValues[ch][z1*8 + v][z2*8 + u] * cosValues[v][u][j][i] * c;
                                 }
                             }
-                            finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * Math.pow(2, quantLevel));
+                            finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * calpow);
                 
-                                // Set the pixel in the image
-                                int rgb = image.getRGB(z2*8 + i, z1*8 + j);
-                                if (ch == 0) {
-                                    rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 16) & 0x00FF0000);
-                                } else if (ch == 1) {
-                                    rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 8) & 0x0000FF00);
-                                } else if (ch == 2) {
-                                    rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][z1*8 + j][z2*8 + i] & 0x000000FF);
-                                }
-                                image.setRGB(z2*8 + i, z1*8 + j, rgb);
+                            // Set the pixel in the image
+                            int rgb = image.getRGB(z2*8 + i, z1*8 + j);
+                            if (ch == 0) {
+                                rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 16) & 0x00FF0000);
+                            } else if (ch == 1) {
+                                rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][z1*8 + j][z2*8 + i] << 8) & 0x0000FF00);
+                            } else if (ch == 2) {
+                                rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][z1*8 + j][z2*8 + i] & 0x000000FF);
+                            }
+                            image.setRGB(z2*8 + i, z1*8 + j, rgb);
                         }
                     }
                 }
@@ -148,6 +150,7 @@ public class ImageDisplay {
 
     
     public void iDCTProgressiveSpectral(int quantLevel, int latency, BufferedImage image) {
+        double calpow = Math.pow(2, quantLevel);
         for (int k = 0; k < 64; k++) {
             for(int z1=0;z1<scaledHeight;z1++){
                 for(int z2=0;z2<scaledWidth;z2++){
@@ -205,7 +208,7 @@ public class ImageDisplay {
                                         }
                                     }
                                 }
-                                finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * Math.pow(2, quantLevel));
+                                finalimage[ch][z1*8 + j][z2*8 + i] = (int) (sum * calpow);
                 
                                 // Set the pixel in the image
                                 int rgb = image.getRGB(z2*8 + i, z1*8 + j);
@@ -232,61 +235,54 @@ public class ImageDisplay {
         }
     }
     
-    
-    private BufferedImage createImageFromBlocks() {
-        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        for (int blockY = 0; blockY < scaledHeight; blockY++) {
-            for (int blockX = 0; blockX < scaledWidth; blockX++) {
-                for (int j = 0; j < 8; j++) {
-                    for (int i = 0; i < 8; i++) {
-                        int xPos = blockX * 8 + i;
-                        int yPos = blockY * 8 + j;
-                        int rgb = (finalimage[0][yPos][xPos] << 16) | (finalimage[1][yPos][xPos] << 8) | finalimage[2][yPos][xPos];
-                        result.setRGB(xPos, yPos, rgb);
-                    }
-                }
-            }
-        }
-        return result;
-    }
-    
 
-    public void iDCTProgressiveBitApproximation(int quantLevel, int latency) {
-        int maxBit = getMaxBit();
-        for (int bit = 1; bit <= maxBit; bit++) {
-            for (int ch = 0; ch < 3; ch++) {
-                for (int blockY = 0; blockY < scaledHeight; blockY++) {
-                    for (int blockX = 0; blockX < scaledWidth; blockX++) {
+    public void progressiveMode(int quantLevel, int latency, BufferedImage image) {
+        int maxBitDepth = 31;
+        double calpow = Math.pow(2, quantLevel);
+        for (int bit = 1; bit <= maxBitDepth; bit++) { // Iterate over each significant bit
+            int shiftAmount = maxBitDepth - bit;
+            for (int z1 = 0; z1 < scaledHeight; z1++) {
+                for (int z2 = 0; z2 < scaledWidth; z2++) {
+                    for (int ch = 0; ch < 3; ch++) {
                         for (int j = 0; j < 8; j++) {
                             for (int i = 0; i < 8; i++) {
                                 double sum = 0;
-                                int count = 0;
-                                int value = dctValues[ch][blockY * 8][blockX * 8];
-                                while ((value & 1) == 0 && count < bit) {
-                                    value >>= 1;
-                                    count++;
-                                }
-                                if ((value & 1) == 1) { // Include coefficient if bit is significant
-                                    for (int v = 0; v < 8; v++) {
-                                        for (int u = 0; u < 8; u++) {
-                                            double c;
-                                            if (u != 0 && v != 0)
-                                                c = 0.25;
-                                            else if ((u == 0 && v != 0) || (u != 0 && v == 0))
-                                                c = 0.25 * 0.707;
-                                            else
-                                                c = 0.125;
-                                            sum += dctValues[ch][v + blockY * 8][u + blockX * 8] * cosValues[v][u][j][i] * c;
-                                        }
+                                for (int v = 0; v < 8; v++) {
+                                    for (int u = 0; u < 8; u++) {
+                                        double c;
+                                        if (u != 0 && v != 0)
+                                            c = 0.25;
+                                        else if ((u == 0 && v != 0) || (u != 0 && v == 0))
+                                            c = 0.25 * 0.707;
+                                        else
+                                            c = 0.125;
+                                        
+                                        double coefficient = dctValues[ch][z1 * 8 + v][z2 * 8 + u];
+                                        long coefficientAsLong = (long) coefficient;
+                                        coefficientAsLong = (coefficientAsLong >> shiftAmount) << shiftAmount;
+                                        coefficient = coefficientAsLong;
+                                        
+                                        sum += coefficient * cosValues[v][u][j][i] * c;
                                     }
                                 }
-                                finalimage[ch][j + blockY * 8][i + blockX * 8] = (int) (sum * Math.pow(2, quantLevel));
+                                finalimage[ch][z1 * 8 + j][z2 * 8 + i] = (int) (sum * calpow);
+    
+                                // Set the pixel in the image
+                                int rgb = image.getRGB(z2 * 8 + i, z1 * 8 + j);
+                                if (ch == 0) {
+                                    rgb = (rgb & 0xFF00FFFF) | ((finalimage[ch][z1 * 8 + j][z2 * 8 + i] << 16) & 0x00FF0000);
+                                } else if (ch == 1) {
+                                    rgb = (rgb & 0xFFFF00FF) | ((finalimage[ch][z1 * 8 + j][z2 * 8 + i] << 8) & 0x0000FF00);
+                                } else if (ch == 2) {
+                                    rgb = (rgb & 0xFFFFFF00) | (finalimage[ch][z1 * 8 + j][z2 * 8 + i] & 0x000000FF);
+                                }
+                                image.setRGB(z2 * 8 + i, z1 * 8 + j, rgb);
                             }
                         }
                     }
                 }
             }
-            lbIm2.setIcon(new ImageIcon(createImageFromBlocks())); // Update image
+            lbIm2.setIcon(new ImageIcon(image)); // Update image
             lbIm2.updateUI(); // Refresh UI
             try {
                 Thread.sleep(latency);
@@ -294,39 +290,6 @@ public class ImageDisplay {
                 e.printStackTrace();
             }
         }
-    }
-    
-    private int getMaxBit() {
-        int maxBit = 0;
-        for (int ch = 0; ch < 3; ch++) {
-            for (int y = 0; y < scaledHeight; y++) {
-                for (int x = 0; x < scaledWidth; x++) {
-                    for (int v = 0; v < 8; v++) {
-                        for (int u = 0; u < 8; u++) {
-                            int dctValue = dctValues[ch][y * 8 + v][x * 8 + u];
-                            int bit = getSignificantBit(dctValue);
-                            if (bit > maxBit) {
-                                maxBit = bit;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return maxBit;
-    }
-    
-    private int getSignificantBit(int value) {
-        int count = 0;
-        while ((value & 1) == 0 && count < 32) {
-            value >>= 1;
-            count++;
-        }
-        return count;
-    }
-    
-    private int getBit(int value, int index) {
-        return (value >> index) & 1;
     }
     
     public void showIms(String[] args){
@@ -366,7 +329,7 @@ public class ImageDisplay {
                 iDCTProgressiveSpectral(qLevel, latency, decodedImage);
                 break;
             case 3:
-                iDCTProgressiveBitApproximation(qLevel, latency);
+                progressiveMode(qLevel, latency, decodedImage);
                 break;
 
 
